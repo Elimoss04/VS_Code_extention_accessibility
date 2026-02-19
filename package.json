@@ -9,7 +9,11 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onCommand:accessibility-assistant.helloWorld",
+    "onView:documentation",
+    "onView:analysis"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     
@@ -18,19 +22,23 @@
         {
           "id": "accessibility_sidebar",
           "title": "Accessibility Sidebar",
-          "icon": "resources/accessibility-sidebar.png"
+          "icon": "resources/accessibility-icon.png"
         }
       ]
     },
     "views": {
       "accessibility_sidebar": [
         {
-          "id": "view-documentation",
-          "name": "Documentation"
+          "type": "webview",
+          "id": "documentation",
+          "name": "Documentation",
+          "icon": "resources/accessibility-icon.png"
         },
         {
-          "id": "view-analysis",
-          "name": "Analysis"
+          "type": "webview",
+          "id": "analysis",
+          "name": "Analysis",
+          "icon": "resources/accessibility-icon.png"
         }
       ]
     },

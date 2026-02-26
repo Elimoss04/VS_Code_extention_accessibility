@@ -3,7 +3,9 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import * as fs from 'fs';
+import * as dotenv from 'dotenv';
 // Import marked for markdown parsing
+
 
 // WEBVIEW PROVIDER FOR DOCUMENTATION VIEW
 class DocumentationViewProvider implements vscode.WebviewViewProvider {
@@ -70,7 +72,56 @@ class AnalysisViewProvider implements vscode.WebviewViewProvider {
 
 	public static readonly viewType = 'analysis';
 
-	constructor(private readonly _extensionUri: vscode.Uri) {}
+	constructor(
+		private readonly _extensionUri: vscode.Uri,
+		private readonly _context: vscode.ExtensionContext
+	) {}
+
+	private async runGeminiAnalysis(webview: vscode.Webview) {
+		const apiKey = process.env.GEMINI_API_KEY;
+		if (!apiKey) {
+			vscode.window.showErrorMessage('Gemini API key is not set. Please add it to your .env file.');
+			return;
+		}
+	
+		const editor = vscode.window.activeTextEditor;
+		if (!editor) {
+    		webview.postMessage({ command: 'analysisError', error: 'No file open to analyse.' });
+    		return;
+		}
+		const code = editor.document.getText();
+
+		const docPath = vscode.Uri.joinPath(this._extensionUri, 'css', 'Web_Design_guidelines.md');
+		const documentation = fs.readFileSync(docPath.fsPath, 'utf-8');
+
+		try {
+   			const { GoogleGenAI } = await import('@google/genai');
+    		const genAI = new GoogleGenAI({ apiKey });
+
+			const response = await genAI.models.generateContent({
+			model: 'gemini-3-flash-preview',
+			contents: `You are an expert code assistant specialized in conversational web browsing. 
+			You provide your suggestions based on the documentation provided and nothing else. You generate the analysis based on this format:
+			1. Title of the guideline violated
+			2. Rationale: explain why you are proposing this suggestion based on the guidelines present in the documentation
+			3. Suggestion: shown in a diff format
+
+			Here is the documentation:
+			${documentation}
+
+			Here is the code to analyse:
+			${code}`
+			});
+
+    	const text = response.text || '';
+    	webview.postMessage({ command: 'analysisResult', result: text });
+
+		} catch (err: any) {
+    		webview.postMessage({ command: 'analysisError', error: err.message });
+		}
+		
+
+	}
 
 	public resolveWebviewView(
 		webviewView: vscode.WebviewView,
@@ -86,27 +137,59 @@ class AnalysisViewProvider implements vscode.WebviewViewProvider {
 
 		webviewView.webview.html = this.getWebviewContent(webviewView.webview, styleUri);
 		console.log('Analysis view resolved');
+
+		// Listen for messages coming from the webview
+    	webviewView.webview.onDidReceiveMessage(async (message) => {
+        	if (message.command === 'runAnalysis') {
+            	await this.runGeminiAnalysis(webviewView.webview);
+        	}
+    	});
+
 	}
 
 	private getWebviewContent(webview: vscode.Webview, styleUri: vscode.Uri): string {
 	
 	return `<!DOCTYPE html>
-	<html lang="en">
-	<head>
-		<meta charset="UTF-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<link rel="stylesheet" href="${styleUri}">
-		<title>Analysis</title>
-	</head>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link rel="stylesheet" href="${styleUri}">
+        <title>Analysis</title>
+    </head>
+    <body>
+    <div class="container">
+        <h1>Analysis</h1>
+        <p>Code analysis tools and results will appear here.</p>
+        <div>
+            <button id="run-analysis">Run Analysis</button>
+        </div>
+        <div id="status"></div>
+        <div id="results"></div>
+    </div>
 
-	<body>
-	<div class ="container">
-		<h1>Analysis</h1>
-		<p>Code analysis tools and results will appear here.</p>
-	</div>
-	</body>
+    <script>
+        const vscode = acquireVsCodeApi();
 
-	</html>`;
+        document.getElementById('run-analysis').addEventListener('click', () => {
+            document.getElementById('status').textContent = 'Analysing...';
+            document.getElementById('results').textContent = '';
+            vscode.postMessage({ command: 'runAnalysis' });
+        });
+
+        window.addEventListener('message', event => {
+            const message = event.data;
+            if (message.command === 'analysisResult') {
+                document.getElementById('status').textContent = '';
+                document.getElementById('results').textContent = message.result;
+            } else if (message.command === 'analysisError') {
+                document.getElementById('status').textContent = '';
+                document.getElementById('results').textContent = 'Error: ' + message.error;
+            }
+        });
+    </script>
+    </body>
+    </html>`;
 	
 	}
 }
@@ -117,6 +200,10 @@ class AnalysisViewProvider implements vscode.WebviewViewProvider {
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
+
+	dotenv.config({ path: path.join(context.extensionPath, '.env') });
+
+	
 
 	// Use the console to output diagnostic information (console.log) and errors (console.error)
 	// This line of code will only be executed once when your extension is activated
@@ -129,7 +216,7 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.registerWebviewViewProvider(DocumentationViewProvider.viewType, docProvider)
 	);
 
-	const analysisProvider = new AnalysisViewProvider(context.extensionUri);
+	const analysisProvider = new AnalysisViewProvider(context.extensionUri, context);
 	context.subscriptions.push(
 		vscode.window.registerWebviewViewProvider(AnalysisViewProvider.viewType, analysisProvider)
 	);

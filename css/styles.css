@@ -9,9 +9,10 @@ body {
 .container {
     max-width: 800px;
     margin: 0 auto;
-    background-color: rgb(33, 41, 82);
+    background-color: rgb(25, 21, 36);
+    overflow: scroll;
     padding: 20px;
-    border-radius: 8px;
+    border-radius: 6px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
@@ -32,10 +33,26 @@ button {
 }
 
 button:hover {
-    background-color: #0052a3;
+    background-color: #3f7fbf;
+    transition: background-color 0.3s ease;
+    
 }
 
 button:focus {
     outline: 2px solid #0066cc;
     outline-offset: 2px;
+    transition: outline 0.5s ease;
+}
+
+#status {
+    margin-top: 20px;
+    font-size: 14px;
+    color: #ffffff;
+    
+}
+
+#results {
+    margin-top: 20px;
+    font-size: 14px;
+    color: #e7c4c4;
 }

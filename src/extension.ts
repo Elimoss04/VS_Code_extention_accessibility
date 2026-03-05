@@ -34,9 +34,50 @@ class DocumentationViewProvider implements vscode.WebviewViewProvider {
 		// read the markdown file and convert it to HTML
 		const markdownContent = fs.readFileSync(docPath.fsPath, 'utf-8');
 		const { marked } = await import('marked');
-		const htmlContent = marked.parse(markdownContent);
+		const tokens = marked.lexer(markdownContent); //lexer divides the markdown in token (titles, paragraphs, code pieces...)
+		// Divide tokens into sections, one per guideline
+		const sections: { title: string; html: string }[] = []; //each element of the array contains title (of the guideline) and html (the content of the guideline in HTML)
+		let currentTitle = ''; //variable that is the title we are analysing 
+		let currentTokens: any[] = []; //array filled with tokens of the current guideline
 
+		for (const token of tokens) {
+    	const isDetailsHeading = token.type === 'html' && token.raw.includes('<details'); //for the 3 first guidelines: HTML token which contains <details>
+    	const isMarkdownHeading = token.type === 'heading' && token.depth === 3; //heading type token with ### (4-12)
 
+    	if (isDetailsHeading || isMarkdownHeading) {
+        if (currentTitle != '') {
+            sections.push({
+                title: currentTitle,
+                html: marked.parser(currentTokens as any)
+            });
+        }
+        if (isDetailsHeading) {
+            const titleMatch = token.raw.match(/<h3[^>]*>(.*?)<\/h3>/s); //regex, more info https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_expressions
+            currentTitle = titleMatch ? titleMatch[1].trim() : 'Guideline';
+            currentTokens = [];
+        } else {
+            currentTitle = token.text;
+            currentTokens = [];
+        }
+    	} else {
+        	currentTokens.push(token); //if currentTokens isn't a title
+    	}
+	}
+
+		// Push last section
+		if (currentTitle) {
+    	sections.push({
+        	title: currentTitle,
+        	html: marked.parser(currentTokens as any)
+    		});
+		}
+
+		const htmlContent = sections.map(s => `
+    	<details class="guideline-card" data-title="${s.title.toLowerCase()}">
+        <summary class="guideline-header">${s.title}</summary>
+        <div class="guideline-body">${s.html.replace(/<details[^>]*>[\s\S]*?<\/summary>/g, '').replace(/<\/details>/g, '')}</div>
+    	</details>		
+		`).join('');
 		webviewView.webview.html = this.getWebviewContent(webviewView.webview, styleUri, htmlContent as string);
 		console.log('Documentation view resolved');
 	}
